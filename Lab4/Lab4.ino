@@ -391,6 +391,24 @@ void loop() {
             }
             break;
           
+          // If I understand correctly, in between here is the retrieval of the ping pong ball.
+          // Here's my plan. First, we adjust the arm to what we need. THis might be done already in case 9.
+          // Next Case: Slowly sweep to the right, checking for an IR signal the whole time. Go a set amount. ~45 degree turn.
+          // Next Case: Slowly sweep the opposite way 90 degrees the opposite way, checking for the IR signal.
+          // If the IR signal is recieved at any point in this process, then we stop moving and skip to the next case.
+          // If the signal is not recieved, slowly sweep back 45 degrees to center, still checking.
+          // I'm thinking of making a variable that checks how many sweeps we've done, and sets the arm at a different height based on that count.
+          // Thus, if no signal is found, we set the drive index to 9, or whatever the arm setting is for the search, with an if statement for the search iteration.
+          // Next Case: If the signal was found, we drive slowly forward. In theory we set this to be the distance to the bal from the stopping point with the paper.
+          // I may need to pick a better option for moving to the ball. And should probably be constantly checking for the ball signal.
+          // New case: Once we've driven to the ball, we pause.
+          // New Case: Slowly close the claw.
+          // New Case: Now we need to drive back. Idk when the reverse starts as is, so it will either take it from here, or we need to get back to the paper.
+          // If we need to get back to the paper, simply drive backwards the same distance that we went to get the ball.
+          // We may need to track how much we turned and undo that. Or find out what the encoder pos difference is to be aligned right and adjust to that difference.
+          // Next case: Then we get back to the reversal and finish up.
+          // Ping pong ball retrieval Ends here (Should be back at the starting point by now?)
+
           case 11:
             if (pos[0] + encoder1 + encoder2 + encoder3 > encoder1 + encoder2) {
               setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor backward at speed determined by pot
