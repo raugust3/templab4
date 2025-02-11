@@ -94,7 +94,7 @@ const int encoderCm          = 80;                                     // encode
 //            You will have to experiment to determine appropriate values.
 
 const int cClawServoOpen     = 1000;                                   // Value for open position of claw
-const int cClawServoClosed   = 2120;                                   // Value for closed position of claw
+const int cClawServoClosed   = 2130;                                   // Value for closed position of claw
 const int cArmServoUp        = 2200;                                   // Value for shoulder of arm fully up
 const int cArmServoDown      = 1000;                                   // Value for shoulder of arm fully down
 const int cMotorAdjustment[] = {0, 0};                                 // PWM adjustment for motors to run closer to the same speed
@@ -242,6 +242,8 @@ void loop() {
       case 0: // Robot stopped
         setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                        // stop left motor
         setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                        // stop right motor
+        ledcWrite(cArmServo, 1450);
+        ledcWrite(cClawServo, 1000);
         encoder[0].pos = 0;                                            // clear left encoder
         encoder[1].pos = 0;                                            // clear right encoder
         driveIndex = 0;                                                // reset drive index
@@ -254,7 +256,7 @@ void loop() {
         switch(driveIndex) {
           case 0: // waiting 2 seconds before executing
             if (timeUp2sec && motorsEnabled) {
-              ledcWrite(cArmServo, 1450);
+
               // Read pot to update drive motor speed 
               pot = analogRead(cPotPin);
               driveSpeed = map(pot, 0, 4095, cMinPWM, cMaxPWM);
@@ -267,7 +269,7 @@ void loop() {
           case 1: // driving forward 45 cm (the length of 1.5 pieces of paper)
             if (pos[0] < encoderCm * 45) {
               setMotor(1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor forward at speed determined by pot
-              setMotor(-1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor forward at speed determined by pot
+              setMotor(-1, driveSpeed - 8, cIN1Pin[1], cIN2Pin[1]);            // drive right motor forward at speed determined by pot, rich: pwm adjust 8
               // Serial.printf("pos: %lu\n", pos[0]);
             } else {
               setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                           // stop left motor
@@ -286,7 +288,9 @@ void loop() {
 
           case 2: // waiting 2 seconds
             if (timeUp2sec) {
-              ledcWrite(cClawServo, cClawServoOpen);
+
+              //ledcWrite(cClawServo, 1800);
+
               encoder[0].pos = 0;                                            // clear left encoder
               encoder[1].pos = 0;                                            // clear right encoder
               // increment step
@@ -295,8 +299,8 @@ void loop() {
             break;
 
           case 3: // turn left (counterclockwise) - motors spin in same direction
-            if (abs(pos[0]) < encoderCm * 20) {
-              setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor forward at speed determined by pot
+            if (abs(pos[0]) < encoderCm * 9) {
+              setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor backward at speed determined by pot
               setMotor(-1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor forward at speed determined by pot
               // Serial.printf("pos: %lu\n", abs(pos[0]));
             } else {
@@ -326,7 +330,7 @@ void loop() {
           case 5: // drive forward 38.74 cm (the length of 1.5 pieces of paper)
             if (pos[0] < encoderCm * 38.74) {
               setMotor(1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor forward at speed determined by pot
-              setMotor(-1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor forward at speed determined by pot
+              setMotor(-1, driveSpeed - 8, cIN1Pin[1], cIN2Pin[1]);            // drive right motor forward at speed determined by pot, rich: pwm adjust 8
               // Serial.printf("pos: %lu\n", pos[0]);
             } else {
               setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                           // stop left motor
@@ -349,6 +353,7 @@ void loop() {
               encoder[1].pos = 0;                                            // clear right encoder
               // increment step
               driveIndex++;
+              //driveIndex = 11;
             }
             break;
 
@@ -414,7 +419,7 @@ void loop() {
             break;
           
           case 13:
-            if (encoder1 + encoder2 - pos[0] > encoder1) {
+            if (encoder1 + encoder2 + encoderCm - pos[0] > encoder1) {
               setMotor(1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor forward at speed determined by pot
               setMotor(1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor forward at speed determined by pot
               // Serial.printf("pos: %lu\n", encoder1 + encoder2 - pos[0]);
@@ -453,6 +458,7 @@ void loop() {
 
               // increment step
               driveIndex++;
+              // robotModeIndex = 0;
 
               // reset timer for next step 2 sec wait
               timerCount2sec = 0;
@@ -462,14 +468,14 @@ void loop() {
 
           case 16:
             if (timeUp2sec) {
-              ledcWrite(cArmServo, 1450); 
+              //ledcWrite(cArmServo, 1450); 
               // increment step
               driveIndex++;
             }
             break;
 
           case 17:
-            ledcWrite(cClawServo, 1000);
+            //ledcWrite(cClawServo, 1500);
             // increment step
             robotModeIndex = 0;
             break;
