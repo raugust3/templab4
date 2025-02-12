@@ -115,10 +115,15 @@ Encoder encoder[]            = {{35, 32, 0},                           // left e
 uint8_t driveSpeed           = 0;                                      // motor drive speed (0-255)
 uint8_t driveIndex           = 0;                                      // state index for run mode
 Ultrasonic ultrasonic        = {21, 22};                               // trigger on GPIO21 and echo on GPIO22
+int lastPos[]                = {0, 0};                                 // Keep track of previous important encoder positions
+int atPaperPos[]             = {100, 100};                                 // Encoder position before driving forward to get the ball
+int sweepCount               = 0;
 int encoder1;
 int encoder2;
 int encoder3;
 int encoder4;
+
+
 
 // Declare SK6812 SMART LED object
 //   Argument 1 = Number of LEDs (pixels) in use
@@ -353,11 +358,118 @@ void loop() {
               encoder[1].pos = 0;                                            // clear right encoder
               // increment step
               driveIndex++;
-              //driveIndex = 11;
             }
             break;
 
-          case 7:
+            //Ball retrieval starts here! Get those balls!
+
+          case 7: //Open the claw to prepare for getting the ball
+            ledcWrite(cClawServo, cClawServoOpen);                   
+            // increment step
+            driveIndex++;
+            break;
+
+          case 8: // Bring the arm up now that the ball has been grabbed
+            // Change the arm height to a little above the lowest/a little below avg beacon height.
+            ledcWrite(cArmServo, 1100 + sweepCount*100); // The height will increase with each iteration to find the beacon. Idk if this is hhow it works.    
+            // increment step
+            driveIndex++;
+            break;
+
+          case 9: // Sweep to the right and check for the IR beacon. Stop if it picks up a reading.
+            //In theory this if statement will catch if the IR beacon gets a reading.
+            if (Serial2.available() > 0 || encoder[0].pos < atPaperPos[0]) {                                       // if data available
+              receivedData = Serial2.read();                                     // read incoming byte
+              Serial.printf("Received: %c\n", receivedData);                     // output received byte
+              
+              setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                            // stop left motor
+              setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                            // stop right motor
+
+              atPaperPos[0] = encoder[0].pos;                                     // Record the enocoder positions from the turn.
+              atPaperPos[1] = encoder[1].pos;
+              
+              driveIndex = 11; //Skip to driving forward
+              
+            } else if (abs(pos[0]) < encoderCm * 4) {                            // Turn for ~45 degres clockwise                     
+              setMotor(1, driveSpeed-100, cIN1Pin[0], cIN2Pin[0]);               // drive left motor backward at speed determined by pot
+              setMotor(1, driveSpeed-100, cIN1Pin[1], cIN2Pin[1]);               // drive right motor forward at speed determined by pot
+              // Serial.printf("pos: %lu\n", abs(pos[0]));
+            } else { 
+              setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                            // stop left motor
+              setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                            // stop right motor
+
+              lastPos[0] = encoder[0].pos;
+              lastPos[1] = encoder[1].pos;
+
+              // Increment step
+              driveIndex++;
+            }
+            break;
+
+          case 10:
+            // Next Case: Slowly sweep the opposite way 90 degrees the opposite way, checking for the IR signal.
+            //In theory this if statement will catch if the IR beacon gets a reading.
+            if (Serial2.available() > 0 || encoder[0].pos < atPaperPos[0]) {     // If data available
+              receivedData = Serial2.read();                                     // read incoming byte
+              Serial.printf("Received: %c\n", receivedData);                     // output received byte
+              
+              setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                            // stop left motor
+              setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                            // stop right motor
+
+              atPaperPos[0] = encoder[0].pos;                                     // Record the enocoder positions from the turn.
+              atPaperPos[1] = encoder[1].pos;
+              
+              driveIndex = 11; //Skip to driving forward
+              
+            } else if (abs(pos[0]) < encoderCm * 9) {                            // Turn for ~45 degres clockwise                     
+              setMotor(1, driveSpeed-100, cIN1Pin[0], cIN2Pin[0]);               // drive left motor backward at speed determined by pot
+              setMotor(1, driveSpeed-100, cIN1Pin[1], cIN2Pin[1]);               // drive right motor forward at speed determined by pot
+              // Serial.printf("pos: %lu\n", abs(pos[0]));
+            } else { 
+              setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                            // stop left motor
+              setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                            // stop right motor
+              // Increment step
+              driveIndex++;
+            }
+
+            // If the IR signal is recieved at any point in this process, set atPaperPos and skip to next case
+            // If the signal is not recieved, slowly sweep back 45 degrees to center, still checking.
+            // I'm thinking of making a variable that checks how many sweeps we've done, and sets the arm at a different height based on that count.
+            // Thus, if no signal is found, we set the drive index to 9, or whatever the arm setting is for the search, with an if statement for the search iteration.
+            break;
+          
+          case 11:
+            // Next Case: Drive slowly forward. In theory we set this to be the distance to the bal from the stopping point with the paper.
+            // Use the ultrasonic: Reading ~930, 16cm, 6 inches is directly at the ball
+            // start US measurement once every 100 cycles (~100 ms)
+            if (cycles == 0) {
+              ping(&ultrasonic);                                                // start US measurement
+            }
+            cycles++;
+            if (cycles >= 100) {                                                // 100 cycles = ~100 ms
+              cycles = 0;
+            }
+            pulseDuration = getEchoTime(&ultrasonic);                           // check if new measurement is available
+            // if valid measurement, update variable and output to serial
+            if (pulseDuration < 930) {
+              setMotor(1, driveSpeed - 100, cIN1Pin[0], cIN2Pin[0]);            // drive left motor forward at speed determined by pot
+              setMotor(-1, driveSpeed - 108, cIN1Pin[1], cIN2Pin[1]);           // drive right motor forward at speed determined by pot, rich: pwm adjust 8
+              // Serial.printf("pos: %lu\n", pos[0]);
+            } else {
+              setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                           // stop left motor
+              setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                           // stop right motor
+            break;
+          
+          case 12: // Once we've driven to the ball, we pause.
+            if (timeUp2sec) {
+              encoder[0].pos = 0;                                               // clear left encoder
+              encoder[1].pos = 0;                                               // clear right encoder
+              // increment step
+              driveIndex++;
+            }
+            break;
+          
+          case 13: // Close the claw to grab the ball 
             ledcWrite(cClawServo, cClawServoClosed);                   
             // increment step
             driveIndex++;
@@ -367,14 +479,14 @@ void loop() {
             timeUp4sec = false;
             break;
 
-          case 8: // waiting 4 seconds
+          case 14: // waiting 4 seconds
             if (timeUp4sec) {
               // increment step
               driveIndex++;
             }
             break;
-          
-          case 9:
+           
+          case 15: // Bring the arm up now that the ball has been grabbed
             ledcWrite(cArmServo, 1600);                   
             // increment step
             driveIndex++;
@@ -384,32 +496,36 @@ void loop() {
             timeUp2sec = false;
             break;
 
-          case 10: // waiting 2 seconds
+          case 16: // waiting 2 seconds
             if (timeUp2sec) {
               // increment step
               driveIndex++;
             }
             break;
-          
-          // If I understand correctly, in between here is the retrieval of the ping pong ball.
-          // Here's my plan. First, we adjust the arm to what we need. THis might be done already in case 9.
-          // Next Case: Slowly sweep to the right, checking for an IR signal the whole time. Go a set amount. ~45 degree turn.
-          // Next Case: Slowly sweep the opposite way 90 degrees the opposite way, checking for the IR signal.
-          // If the IR signal is recieved at any point in this process, then we stop moving and skip to the next case.
-          // If the signal is not recieved, slowly sweep back 45 degrees to center, still checking.
-          // I'm thinking of making a variable that checks how many sweeps we've done, and sets the arm at a different height based on that count.
-          // Thus, if no signal is found, we set the drive index to 9, or whatever the arm setting is for the search, with an if statement for the search iteration.
-          // Next Case: If the signal was found, we drive slowly forward. In theory we set this to be the distance to the bal from the stopping point with the paper.
-          // I may need to pick a better option for moving to the ball. And should probably be constantly checking for the ball signal.
-          // New case: Once we've driven to the ball, we pause.
-          // New Case: Slowly close the claw.
-          // New Case: Now we need to drive back. Idk when the reverse starts as is, so it will either take it from here, or we need to get back to the paper.
-          // If we need to get back to the paper, simply drive backwards the same distance that we went to get the ball.
-          // We may need to track how much we turned and undo that. Or find out what the encoder pos difference is to be aligned right and adjust to that difference.
-          // Next case: Then we get back to the reversal and finish up.
-          // Ping pong ball retrieval Ends here (Should be back at the starting point by now?)
 
-          case 11:
+          case 17:  // Drive backwards to atPaperPos encoder positions
+            if (encoder[0].pos > atPaperPos[0]) {
+              setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);               // drive left motor forward at speed determined by pot
+              setMotor(1, driveSpeed - 8, cIN1Pin[1], cIN2Pin[1]);            // drive right motor forward at speed determined by pot, rich: pwm adjust 8
+            } else {
+              driveIndex++;
+            }
+            break;
+          
+          case 18:
+          // Revert encoder positions to straightPos. Should be ready to finish.
+            if(encoder[0].pos < 0) {
+              setMotor(1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);               // drive left motor forward at speed determined by pot
+              setMotor(1, driveSpeed - 8, cIN1Pin[1], cIN2Pin[1]);            // drive right motor forward at speed determined by pot, rich: pwm adjust 8
+            } else {
+              setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);               // drive left motor forward at speed determined by pot
+              setMotor(-1, driveSpeed - 8, cIN1Pin[1], cIN2Pin[1]);            // drive right motor forward at speed determined by pot, rich: pwm adjust 8
+            }
+            break;
+          
+          // Ping pong ball retrieval ends here. Let's bring it home!
+
+          case 19:
             if (pos[0] + encoder1 + encoder2 + encoder3 > encoder1 + encoder2) {
               setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor backward at speed determined by pot
               setMotor(1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor backward at speed determined by pot
@@ -427,7 +543,7 @@ void loop() {
             }
             break;
           
-          case 12:
+          case 20:
             if (timeUp2sec) {
               encoder[0].pos = 0;                                            // clear left encoder
               encoder[1].pos = 0;                                            // clear right encoder
@@ -436,7 +552,7 @@ void loop() {
             }
             break;
           
-          case 13:
+          case 21:
             if (encoder1 + encoder2 + encoderCm - pos[0] > encoder1) {
               setMotor(1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor forward at speed determined by pot
               setMotor(1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor forward at speed determined by pot
@@ -456,7 +572,7 @@ void loop() {
             }
             break;
           
-          case 14:
+          case 22:
             if (timeUp2sec) {
               encoder[0].pos = 0;                                            // clear left encoder
               encoder[1].pos = 0;                                            // clear right encoder
@@ -465,7 +581,7 @@ void loop() {
             }
             break;
           
-          case 15:
+          case 23:
             if (encoder1 + pos[0] > 0) {
               setMotor(-1, driveSpeed, cIN1Pin[0], cIN2Pin[0]);                  // drive left motor forward at speed determined by pot
               setMotor(1, driveSpeed, cIN1Pin[1], cIN2Pin[1]);                 // drive right motor forward at speed determined by pot
@@ -484,7 +600,7 @@ void loop() {
             }
             break;
 
-          case 16:
+          case 24:
             if (timeUp2sec) {
               //ledcWrite(cArmServo, 1450); 
               // increment step
@@ -492,13 +608,13 @@ void loop() {
             }
             break;
 
-          case 17:
+          case 25:
             //ledcWrite(cClawServo, 1500);
             // increment step
             robotModeIndex = 0;
             break;
         }
-
+      }
       case 2: // Test ultrasound
         setMotor(0, 0, cIN1Pin[0], cIN2Pin[0]);                        // stop left motor
         setMotor(0, 0, cIN1Pin[1], cIN2Pin[1]);                        // stop right motor
@@ -515,7 +631,7 @@ void loop() {
         // if valid measurement, update variable and output to serial
         if (pulseDuration > 0) {
           lastPulse = pulseDuration;
-          // Serial.printf("Ultrasound: %ld ms = %ld cm = %ld in\n", lastPulse, usToCm(lastPulse), usToIn(lastPulse));
+          Serial.printf("Ultrasound: %ld ms = %ld cm = %ld in\n", lastPulse, usToCm(lastPulse), usToIn(lastPulse));
         }
         break;
 
@@ -542,6 +658,7 @@ void loop() {
           cycles = 0;
           Serial.printf("Claw: Pot R1 = %d, mapped = %d\n", pot, clawServoSetpoint);
         }
+        cycles++;
         break;
 
       case 5: // Test arm servo with pot
@@ -553,10 +670,12 @@ void loop() {
         armServoSetpoint = map(pot, 0, 4095, cArmServoDown, cArmServoUp);
         ledcWrite(cArmServo, armServoSetpoint);                        // set the desired servo position
         // limit output rate to serial monitor
+        cycles++;
         if (cycles >= 200) {                                           // 200 cycles = ~200 ms
           cycles = 0;
           Serial.printf("Arm: Pot R1 = %d, mapped = %d\n", pot, armServoSetpoint);
         }
+        Serial.printf("Cycles: %d\n", cycles);
         break;
 
       case 6: //add your code to do something 
